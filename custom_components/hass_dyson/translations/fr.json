@@ -279,6 +279,9 @@
       },
       "scheduled_events": {
         "name": "Événements programmés"
+      },
+      "robot_current_room": {
+        "name": "Pièce actuelle"
       }
     },
     "switch": {
@@ -426,6 +429,9 @@
       },
       "floor_plan": {
         "name": "Plan du logement"
+      },
+      "clean_coverage": {
+        "name": "Couverture du nettoyage"
       }
     },
     "light": {
