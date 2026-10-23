@@ -47,6 +47,8 @@ class DysonSpotScrubCleaningModeSelect(DysonEntity, SelectEntity):
             "scope": "all_mapped_rooms",
             "room_modes": {str(row[0]): reverse.get(row[3]) for row in rows},
             "mixed_modes": len({row[3] for row in rows}) > 1,
+            # Undecoded per-room fields 4-10, preserved on every write.
+            "room_raw_settings": {str(row[0]): row[4:11] for row in rows},
         }
 
     def _apply_preferences(self, preferences: dict[str, Any]) -> None:
