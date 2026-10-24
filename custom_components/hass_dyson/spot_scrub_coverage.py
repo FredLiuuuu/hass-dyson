@@ -3,12 +3,14 @@
 While cleaning, the robot streams the path it drives as ``cur_path`` batches
 on ``status/jdm``: a flat ``[first point id, x, y, angle, update, ..., unix
 time]`` array in metres, in the same map frame as the cloud's map geometry.
-Point ids restart at each clean. The run's ``fullCleanAction`` (VACUUMING,
-MOPPING, VACUUMING_AND_MOPPING) rides the state messages.
+Point ids restart at each clean. ``update`` says what the robot did at the
+point: 0 travelling, 1 vacuuming, 3 vacuuming and mopping (seen on RB05,
+2026-10); 2 is taken to be mopping. The run's ``fullCleanAction`` rides the
+state messages and is the fallback for other values.
 
-The recorder keeps the current run's points, each tagged with the action at
-the time it was driven, so the coverage image can show what was vacuumed
-and what was mopped. It also keeps the latest pose and the room it lies in.
+The recorder keeps the current run's points, each tagged with what was done
+there, so the coverage image can show what was vacuumed and what was
+mopped. It also keeps the latest pose and the room it lies in.
 Points are saved to storage so a restart mid-clean keeps the run.
 """
 
@@ -301,9 +303,8 @@ class CoverageRecorder:
                 continue
             if not self.points:
                 self.started = time.time()
-            self.points.append(
-                [point_id, round(x, 3), round(y, 3), update, bits if update else 0]
-            )
+            point_bits = update & 3 if update & 3 else (bits if update else 0)
+            self.points.append([point_id, round(x, 3), round(y, 3), update, point_bits])
             self._last_id = point_id
             added = True
         if not added:

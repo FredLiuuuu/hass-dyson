@@ -161,6 +161,17 @@ def test_path_points_are_tagged_with_the_action(recorder):
     recorder._store.async_delay_save.assert_called()
 
 
+def test_update_flag_says_what_was_done(recorder):
+    """1 vacuum, 2 mop, 3 both; other values fall back to the run's action."""
+    recorder.coordinator.device.robot_full_clean_action = "VACUUMING_AND_MOPPING"
+    recorder.add_points(
+        [(1, 1, 1, 0, 1), (2, 1, 1, 0, 2), (3, 1, 1, 0, 3), (4, 1, 1, 0, 4)],
+        recorder._current_bits(),
+    )
+
+    assert [p[4] for p in recorder.points] == [VACUUM, MOP, 3, 3]
+
+
 def test_repeated_and_new_runs(recorder):
     recorder.add_points([(100, 1, 1, 0, 1), (101, 1.1, 1, 0, 1)], MOP)
     revision = recorder.revision
@@ -192,7 +203,7 @@ def test_path_falls_back_to_the_cloud(recorder):
     assert recorder.path() == ("cloud", [(1.0, 1.0, 0, 1), (1.1, 1.0, 1, 0)])
 
     recorder.add_points([(1, 1, 1, 0, 1)], MOP)
-    assert recorder.path() == ("live", [(1, 1, 1, MOP)])
+    assert recorder.path() == ("live", [(1, 1, 1, VACUUM)])
 
 
 async def test_start_loads_saved_run_and_follows_messages(recorder):
@@ -259,6 +270,8 @@ async def test_coverage_image_renders_and_caches(recorder, geometry):
     assert attributes["vacuumed_m2"] > 0
     assert attributes["mopped_m2"] == 0
     assert attributes["map_clean_id"] == "clean-1"
+    assert attributes["map_dock"] == (0.2, 0.2)
+    assert attributes["map_bounds"] == [0.0, 8.0, 0.0, 5.0]
 
 
 async def test_coverage_image_without_geometry(recorder):

@@ -54,6 +54,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DEVICE_CATEGORY_ROBOT, DOMAIN
 from .coordinator import DysonDataUpdateCoordinator, TTLCache
 from .entity import DysonEntity
+from .spot_scrub import IDLE_STATES
 from .spot_scrub_coverage import (
     CoverageRecorder,
     get_coverage_recorder,
@@ -1118,6 +1119,13 @@ class DysonCleanCoverageImage(DysonEntity, ImageEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Areas covered and where the path came from."""
         recorder = self._recorder
+        geometry = recorder.geometry or {}
+        corners = [
+            (x, y)
+            for zone in geometry.get("zones", [])
+            for x1, y1, x2, y2 in zone["segments"]
+            for x, y in ((x1, y1), (x2, y2))
+        ]
         return {
             "source": self._source,
             "vacuumed_m2": self._areas.get("vacuumed"),
@@ -1126,6 +1134,16 @@ class DysonCleanCoverageImage(DysonEntity, ImageEntity):
             "run_started": _iso(recorder.started),
             "run_updated": _iso(recorder.updated),
             "map_clean_id": recorder.geometry_clean_id,
+            # Map metres, for checking the path against the room outlines.
+            "map_dock": geometry.get("dock"),
+            "map_bounds": [
+                min(x for x, _ in corners),
+                max(x for x, _ in corners),
+                min(y for _, y in corners),
+                max(y for _, y in corners),
+            ]
+            if corners
+            else None,
         }
 
     async def _build(self) -> bytes | None:
@@ -1134,10 +1152,8 @@ class DysonCleanCoverageImage(DysonEntity, ImageEntity):
         if recorder.geometry is None:
             return None
         device = self.coordinator.device
-        cleaning = getattr(device, "robot_state", None) not in (
-            "INACTIVE_CHARGING",
-            "INACTIVE_CHARGED",
-        )
+        # The marker is only drawn while the robot is out.
+        cleaning = getattr(device, "robot_state", None) not in IDLE_STATES
         key = (recorder.revision, recorder.geometry_clean_id, cleaning)
         if key == self._rendered and self._cached_png:
             return self._cached_png
