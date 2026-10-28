@@ -472,3 +472,67 @@ def test_room_store_timer_follows_listeners(selector):
         unsub.assert_not_called()
         second()
         unsub.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_start_waits_for_mode_write(selector):
+    """A start sent right after a mode change goes out only once it is written."""
+    from custom_components.hass_dyson import spot_scrub_room_select as rs
+    from custom_components.hass_dyson.vacuum import DysonVacuumEntity
+
+    coordinator = selector.coordinator
+    coordinator.device.mqtt_prefix = "RB05"
+    events = []
+    request = coordinator.device.send_jdm_command.side_effect
+
+    async def slow_request(method, params):
+        await asyncio.sleep(0.05)
+        events.append(method)
+        return await request(method, params)
+
+    async def start_clean(**kwargs):
+        events.append("START")
+
+    coordinator.device.send_jdm_command.side_effect = slow_request
+    coordinator.device.robot_start_clean = AsyncMock(side_effect=start_clean)
+    vacuum = DysonVacuumEntity(coordinator)
+
+    with patch.object(rs, "START_SETTLE_SECONDS", 0.01):
+        # Apple Home sends the mode first and the start ~200 ms later.
+        await asyncio.gather(
+            selector.async_select_option("vacuum_only"),
+            vacuum.async_start(),
+        )
+
+    assert events[-1] == "START"
+    assert "service.set_preference" in events
+    assert selector.current_option == "vacuum_only"
+
+
+@pytest.mark.asyncio
+async def test_start_waits_for_room_service(selector):
+    """The room-settings action shares the wait, so automations are covered."""
+    from custom_components.hass_dyson import spot_scrub_room_select as rs
+
+    store = rs.get_room_store(selector.coordinator)
+    events = []
+
+    async def slow_resolve_write():
+        async with store.lock:
+            await asyncio.sleep(0.05)
+            events.append("write")
+
+    async def start():
+        await store.async_wait_before_start()
+        events.append("START")
+
+    with patch.object(rs, "START_SETTLE_SECONDS", 0.01):
+        # The write begins after the start was requested, inside the settle time.
+        await asyncio.gather(start(), _after(0.005, slow_resolve_write))
+
+    assert events[-2:] == ["write", "START"]
+
+
+async def _after(delay, factory):
+    await asyncio.sleep(delay)
+    await factory()
